@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 // Diff calculates the diff between the provided reference file and process outputs and writes
 // the result to the provided output.
-func Diff(output io.Writer, referenceFile io.Reader, processOutputs ...io.Reader) error {
+func Diff(noColor bool, output io.Writer, referenceFile io.Reader, processOutputs ...io.Reader) error {
 	processFields := make([][]string, len(processOutputs))
 	for index, processOutput := range processOutputs {
 		processFields[index] = parseFields(processOutput)
@@ -20,20 +22,23 @@ func Diff(output io.Writer, referenceFile io.Reader, processOutputs ...io.Reader
 		line := s.Text()
 
 		field, ok := extractField(line)
+		key := make([]byte, len(processFields))
 		for index, pf := range processFields {
 			if !ok {
-				fmt.Fprint(output, " ")
+				key[index] = ' '
 				continue
 			}
 			if contains(pf, field) {
-				fmt.Fprintf(output, "%1d", index+1)
+				key[index] = fmt.Sprintf("%1d", index+1)[0]
 				continue
 			}
-			fmt.Fprint(output, "-")
+			key[index] = '-'
 		}
-		fmt.Fprint(output, "| ")
-
-		fmt.Fprintln(output, line)
+		if noColor {
+			fmt.Fprintln(output, string(key)+"| "+line)
+		} else {
+			selectColor(key).Fprintln(output, line)
+		}
 	}
 	if err := s.Err(); err != nil {
 		return fmt.Errorf("scanner: %w", err)
@@ -69,4 +74,15 @@ func contains(items []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func selectColor(key []byte) *color.Color {
+	c := color.New(color.FgWhite)
+	for _, k := range key {
+		switch k {
+		case '-':
+			c = c.Add(color.FgBlue)
+		}
+	}
+	return c
 }
