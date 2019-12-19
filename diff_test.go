@@ -17,10 +17,11 @@ func TestDiff(t *testing.T) {
 	processOutputTwo := "TEST_ONE=\"another value\"\nTEST_THREE=\"value\""
 
 	output := bytes.Buffer{}
-	require.NoError(t, envdiff.Diff(true, &output,
+	require.NoError(t, envdiff.Diff(&output,
 		strings.NewReader(referenceFile),
 		strings.NewReader(processOutputOne),
 		strings.NewReader(processOutputTwo)))
 
-	assert.Equal(t, "  | # Test comment\n12| TEST_ONE=\"value\"\n", output.String())
+	assert.Equal(t, "  | # Test comment\n12| TEST_ONE=\"value\"\n\nmissed by 1:\nTEST_TWO=\"value\"\n\nmissed by 2:\nTEST_THREE=\"value\"\n\n",
+		output.String())
 }

@@ -5,84 +5,70 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/fatih/color"
 )
 
 // Diff calculates the diff between the provided reference file and process outputs and writes
 // the result to the provided output.
-func Diff(noColor bool, output io.Writer, referenceFile io.Reader, processOutputs ...io.Reader) error {
-	processFields := make([][]string, len(processOutputs))
+func Diff(output io.Writer, referenceFile io.Reader, processOutputs ...io.Reader) error {
+	processFields := make([]map[string]string, len(processOutputs))
 	for index, processOutput := range processOutputs {
-		processFields[index] = parseFields(processOutput)
+		processFields[index] = parseOutput(processOutput)
 	}
 
 	s := bufio.NewScanner(referenceFile)
 	for s.Scan() {
 		line := s.Text()
 
-		field, ok := extractField(line)
+		field, _, ok := parseLine(line)
 		key := make([]byte, len(processFields))
 		for index, pf := range processFields {
 			if !ok {
 				key[index] = ' '
 				continue
 			}
-			if contains(pf, field) {
+			if _, ok := pf[field]; ok {
 				key[index] = fmt.Sprintf("%1d", index+1)[0]
+				delete(pf, field)
 				continue
 			}
 			key[index] = '-'
 		}
-		if noColor {
-			fmt.Fprintln(output, string(key)+"| "+line)
-		} else {
-			selectColor(key).Fprintln(output, line)
-		}
+		fmt.Fprintln(output, string(key)+"| "+line)
 	}
 	if err := s.Err(); err != nil {
 		return fmt.Errorf("scanner: %w", err)
+	}
+	fmt.Fprintln(output)
+
+	for index, pf := range processFields {
+		fmt.Fprintf(output, "missed by %d:\n", index+1)
+		for field, value := range pf {
+			fmt.Fprintf(output, "%s=%s\n", field, value)
+		}
+		fmt.Fprintln(output)
 	}
 
 	return nil
 }
 
-func parseFields(r io.Reader) []string {
-	fields := []string{}
+func parseOutput(r io.Reader) map[string]string {
+	fields := map[string]string{}
 
 	s := bufio.NewScanner(r)
 	for s.Scan() {
-		if field, ok := extractField(s.Text()); ok {
-			fields = append(fields, field)
+		if field, value, ok := parseLine(s.Text()); ok {
+			fields[field] = value
 		}
 	}
 
 	return fields
 }
 
-func extractField(line string) (string, bool) {
+func parseLine(line string) (string, string, bool) {
 	if index := strings.Index(line, "="); index > -1 {
-		return strings.TrimSpace(line[:index]), true
+		field := strings.TrimSpace(line[:index])
+		value := line[index+1:]
+		return field, value, true
 	}
-	return "", false
-}
-
-func contains(items []string, item string) bool {
-	for _, i := range items {
-		if i == item {
-			return true
-		}
-	}
-	return false
-}
-
-func selectColor(key []byte) *color.Color {
-	c := color.New(color.FgWhite)
-	for _, k := range key {
-		switch k {
-		case '-':
-			c = c.Add(color.FgBlue)
-		}
-	}
-	return c
+	return "", "", false
 }
